@@ -1,4 +1,4 @@
-function outputs = findClosestBifPt(systemName,caseName,c,dir0)
+function [mpc_out,finished] = findClosestBifPt(mpc,verbose)
 % FINDCLOSESTBIFPT: this function finds the closest bifurcation point using Dobson's
 % iterative method. At each iteration, a CPF is run from the base case
 % loading in a specific direction that is determined by the normal to the
@@ -6,52 +6,53 @@ function outputs = findClosestBifPt(systemName,caseName,c,dir0)
 % iteration. The process stops when two normals in two consecutive runs are
 % close enough in terms of the angle between them.
 
+%% Loading system case and defining parameters
+define_constants;
+nb_bus = size(mpc.bus,1);
 nbIterMax = 20;
 thresAngle = 1e-2;
-
-normal = dir0;
 angleNorm = pi/2;
-nbIter = 0;
-
-optionsCPF.chooseStartPoint = 0;
-
-if c==0
-    sysToLoad = systemName;
-else
-    sysToLoad = sprintf('%s_cont%d',systemName,c);
+if nargin == 1
+    verbose = 0;
 end
 
-% load the file
-mpc = openCase(sysToLoad);
-P0 = mpc.bus([5 6 8],3);
-hfig = ch_loadFigure;
-figure(hfig)
-hold on
-plot3(P0(1),P0(2),P0(3),'ok','MarkerFaceColor','r'),
-fprintf('Iteration     Angle     Distance\n');
+%% Initializing 
+nonzero_loads = mpc.bus(:,PD)~=0;
+normal = mpc.bus(nonzero_loads,PD);
+normal = normal/norm(normal);
+dir_mll = zeros(nb_bus,1);
+nbIter = 0;
+P0 = mpc.bus(nonzero_loads,PD);
+
+if verbose
+    fprintf('Iteration     Angle     Distance\n');
+end
 
 while nbIter < nbIterMax && angleNorm > thresAngle
     % Save the current normal
     normal_old = normal;
-    optionsCPF.dirCPF = normal;
-    
-    % Run CPF
-    resultsCPF = ch_CPF_Dyn(systemName,caseName,c,optionsCPF);
+   
+    % Run MLL problem
+    dir_mll(nonzero_loads) = normal;
+    results_mll = maxloadlim(mpc,dir_mll,'verbose',0,'use_qlim',0);
     
     % Compute the normal
-    resultsCorr = ch_processAfterCPF(systemName,caseName,c,optionsCPF,resultsCPF);
-    normal = resultsCorr.currSurf.normalLoad;
+    normal = get_normal(results_mll);
     
     % Plot
-    Plim = resultsCPF.bus([5 6 8],3);
+    Plim = results_mll.bus([5 7 9],PD)/results_mll.baseMVA;
+    pt_to = Plim + normal;
     figure(hfig)
     hold on
-    plot3(Plim(1),Plim(2),Plim(3),'or');
+    plot3(Plim(1),Plim(2),Plim(3),'or');    
+    vectarrow(Plim,pt_to,'k');
     
     % Compute the angle between the old and new unit normals
     angleNorm = acos(dot(normal_old,normal));
-    fprintf(1,'%6d       %6.3f      %.2f\n',nbIter,angleNorm,norm(Plim-P0));
+    if verbose
+        fprintf(1,'%6d       %6.5f      %.2f\n',nbIter,angleNorm,norm(Plim-P0));
+    end
     nbIter = nbIter+1;
 end
-outputs = Plim;
-end
+finished = nbIterMax > nbIter;
+mpc_out = results_mll;
