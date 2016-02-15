@@ -1,4 +1,4 @@
-function [mpc_out,finished] = findClosestBifPt(mpc,verbose)
+function [mpc_out,finished] = findClosestBifPt(mpc,verbose,hfig)
 % FINDCLOSESTBIFPT: this function finds the closest bifurcation point using Dobson's
 % iterative method. At each iteration, a CPF is run from the base case
 % loading in a specific direction that is determined by the normal to the
@@ -41,11 +41,13 @@ while nbIter < nbIterMax && angleNorm > thresAngle
     
     % Plot
     Plim = results_mll.bus([5 7 9],PD)/results_mll.baseMVA;
-    pt_to = Plim + normal;
-    figure(hfig)
-    hold on
-    plot3(Plim(1),Plim(2),Plim(3),'or');    
-    vectarrow(Plim,pt_to,'k');
+    if verbose > 1
+        pt_to = Plim + normal;
+        figure(hfig)
+        hold on
+        plot3(Plim(1),Plim(2),Plim(3),'or');
+        vectarrow(Plim,pt_to,'k');
+    end
     
     % Compute the angle between the old and new unit normals
     angleNorm = acos(dot(normal_old,normal));

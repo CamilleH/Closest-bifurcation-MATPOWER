@@ -1,9 +1,8 @@
 %% This function is a wrap-up function to test findClosestBifPt.
 
-close all;clear;clc
+clear;clc
 systemName = 'case9static';
-caseName = 'loads568';
-c=0;
-dirCPF = [0;1;0];
+mpc = loadcase(systemName);
+hfig = figure(1);
 
-Pclosest = findClosestBifPt(systemName,caseName,c,dirCPF);
+[mpc_out,finished] = findClosestBifPt(mpc,1,hfig);
