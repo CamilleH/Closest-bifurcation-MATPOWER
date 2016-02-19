@@ -6,6 +6,15 @@ function [mpc_out,finished] = findClosestBifPt(mpc,varargin)
 % iteration. The process stops when two normals in two consecutive runs are
 % close enough in terms of the angle between them.
 
+%% Loading system case and defining parameters
+define_constants;
+nb_bus = size(mpc.bus,1);
+nbIterMax = 20;
+thresAngle = 1e-2;
+angleNorm = pi/2;
+nonzero_loads = mpc.bus(:,PD)~=0;
+P0 = mpc.bus(nonzero_loads,PD)/mpc.baseMVA;
+
 %% Checking the options, if any
 input_checker = inputParser;
 
@@ -33,30 +42,21 @@ check_cov = @(x) (isnumeric(x) && ismatrix(x) && ...
     size(x,1) == size(x,2) && issymmetric(x));
 addParameter(input_checker,'Sigma',default_cov,check_cov);
 
+% Check if we are given a function handle to plot the progress
+default_obj_fun = @(x) (norm(x-P0'));
+check_obj_fun = @(x) isa(x,'function_handle');
+addParameter(input_checker,'obj_fun',default_obj_fun,check_obj_fun);
+
 input_checker.KeepUnmatched = true;
 parse(input_checker,varargin{:});
 
 options = input_checker.Results;
 
-%% Loading system case and defining parameters
-define_constants;
-nb_bus = size(mpc.bus,1);
-nbIterMax = 20;
-thresAngle = 1e-2;
-angleNorm = pi/2;
-
 %% Initializing 
-nonzero_loads = mpc.bus(:,PD)~=0;
 normal = mpc.bus(nonzero_loads,PD);
 normal = normal/norm(normal);
 dir_mll = zeros(nb_bus,1);
 nbIter = 0;
-P0 = mpc.bus(nonzero_loads,PD)/mpc.baseMVA;
-
-if ~(isscalar(options.Sigma) && options.Sigma ~= 0)
-    % Normalize the covariance matrix by base power
-    options.Sigma = options.Sigma/mpc.baseMVA^2;
-end
 
 if options.verbose
     fprintf('Iteration     Angle     Distance\n');
@@ -81,6 +81,7 @@ while nbIter < nbIterMax && angleNorm > thresAngle
     
     % Compute the normal
     normal = get_normal(results_mll);
+    normal = normal/norm(normal);
     if ~(isscalar(options.Sigma) && options.Sigma == 0)
         % Adjusting by projecting onto the covariance matrix, if any has been
         % given as inputs. Note that options.   
@@ -101,7 +102,7 @@ while nbIter < nbIterMax && angleNorm > thresAngle
     % Compute the angle between the old and new unit normals
     angleNorm = acos(dot(normal_old,normal));
     if options.verbose
-        fprintf(1,'%6d       %6.5f      %.2f\n',nbIter,angleNorm,norm(Plim-P0));
+        fprintf(1,'%6d       %6.5f      %.4g\n',nbIter,angleNorm,options.obj_fun(Plim'));
     end
     nbIter = nbIter+1;
 end
